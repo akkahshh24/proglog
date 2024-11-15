@@ -5,6 +5,6 @@ type Config struct {
 	Segment struct {
 		MaxStoreBytes uint64
 		MaxIndexBytes uint64
-		InitialOffset uint64
+		InitialOffset uint64 // used to setup first segment in a log
 	}
 }

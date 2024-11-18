@@ -23,7 +23,7 @@ type log struct {
 	segments      []*segment
 }
 
-func newLog(dir string, c Config) (*log, error) {
+func NewLog(dir string, c Config) (*log, error) {
 	// set defaults
 	if c.Segment.MaxStoreBytes == 0 {
 		c.Segment.MaxStoreBytes = 1024
@@ -134,8 +134,10 @@ func (l *log) Read(off uint64) (*api.Record, error) {
 		}
 	}
 
-	if s == nil {
-		return nil, fmt.Errorf("offset out of range: %d", off)
+	if s == nil || s.nextOffset <= off {
+		// * updated this section to include gRPC status error
+		// return nil, fmt.Errorf("offset out of range: %d", off)
+		return nil, api.ErrOffsetOutOfRange{Offset: off}
 	}
 
 	return s.Read(off)
@@ -171,6 +173,7 @@ func (l *log) HighestOffset() (uint64, error) {
 	return off - 1, nil
 }
 
+// Close iterates over the segments and closes them
 func (l *log) Close() error {
 	// * exclusive write lock
 	l.mu.Lock()
@@ -183,4 +186,22 @@ func (l *log) Close() error {
 	}
 
 	return nil
+}
+
+// Remove closes the log and removes its data
+func (l *log) Remove() error {
+	if err := l.Close(); err != nil {
+		return err
+	}
+
+	return os.RemoveAll(l.dir)
+}
+
+// Reset removes the log and then creates a new log
+func (l *log) Reset() error {
+	if err := l.Remove(); err != nil {
+		return err
+	}
+
+	return l.setup()
 }

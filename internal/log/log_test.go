@@ -22,7 +22,7 @@ func TestLog(t *testing.T) {
 
 			c := Config{}
 			c.Segment.MaxStoreBytes = 32
-			log, err := newLog(dir, c)
+			log, err := NewLog(dir, c)
 			require.NoError(t, err)
 
 			fn(t, log)
@@ -46,8 +46,12 @@ func testAppendRead(t *testing.T, log *log) {
 
 func testOutOfRangeErr(t *testing.T, log *log) {
 	record, err := log.Read(1)
-	require.Error(t, err)
 	require.Nil(t, record)
+
+	// * updated this section to use gRPC errors
+	// require.Error(t, err)
+	apiErr := err.(api.ErrOffsetOutOfRange)
+	require.Equal(t, uint64(1), apiErr.Offset)
 }
 
 // Tests if new log sets itself up with the old data
@@ -74,7 +78,7 @@ func testInitExisting(t *testing.T, log *log) {
 	require.Equal(t, uint64(2), off)
 
 	// re-open log
-	l, err := newLog(log.dir, log.config)
+	l, err := NewLog(log.dir, log.config)
 	require.NoError(t, err)
 
 	// check lowest and highest offset

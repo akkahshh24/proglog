@@ -32,6 +32,7 @@ func TestServer(t *testing.T) {
 	}
 }
 
+// TODO: what is the use of fn?
 func setupTest(t *testing.T, fn func(*config)) (
 	client api.LogClient,
 	cfg *config,

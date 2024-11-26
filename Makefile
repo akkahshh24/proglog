@@ -1,4 +1,4 @@
-CONFIG_PATH=${HOME}/Documents/proglog/certs
+CONFIG_PATH=${HOME}/.proglog
 
 .PHONY: init
 init:

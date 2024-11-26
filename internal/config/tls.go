@@ -12,7 +12,7 @@ type TLSConfig struct {
 	KeyFile       string
 	CAFile        string
 	ServerAddress string
-	Server        bool
+	Server        bool // true for mutual TLS
 }
 
 // setupTLSConfig allows us to get different types of TLS configs.
@@ -21,7 +21,6 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 	var err error // used on line 18 to avoid non-name on left side of := error.
 	tlsConfig := &tls.Config{}
 
-	// This is used only for server TLS config.
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
 		tlsConfig.Certificates = make([]tls.Certificate, 2)
 		tlsConfig.Certificates[0], err = tls.LoadX509KeyPair(
@@ -33,7 +32,6 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 		}
 	}
 
-	// This is used for client/server TLS config.
 	if cfg.CAFile != "" {
 		b, err := os.ReadFile(cfg.CAFile)
 		if err != nil {
@@ -49,6 +47,7 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 			)
 		}
 
+		// for mutual TLS
 		if cfg.Server {
 			tlsConfig.ClientCAs = ca
 			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert

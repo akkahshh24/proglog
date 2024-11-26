@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	api "github.com/akkahshh24/proglog/api/v1"
+	"github.com/akkahshh24/proglog/internal/config"
 	"github.com/akkahshh24/proglog/internal/log"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -18,7 +19,7 @@ func TestServer(t *testing.T) {
 	for scenario, fn := range map[string]func(
 		t *testing.T,
 		client api.LogClient,
-		config *config,
+		config *Config,
 	){
 		"produce/consume a msg to/from the log succeeds": testProduceConsume,
 		"produce/consume stream succeeds":                testProduceConsumeStream,
@@ -33,28 +34,54 @@ func TestServer(t *testing.T) {
 }
 
 // TODO: what is the use of fn?
-func setupTest(t *testing.T, fn func(*config)) (
+func setupTest(t *testing.T, fn func(*Config)) (
 	client api.LogClient,
-	cfg *config,
+	cfg *Config,
 	teardown func(),
 ) {
 	// to tell the compiler to skip the function in the call stack when reporting errors
 	t.Helper()
 
 	// create a listener on any free port
-	l, err := net.Listen("tcp", ":0")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
 	// make an insecure connection to the listener
-	clientOptions := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	conn, err := grpc.NewClient(l.Addr().String(), clientOptions...)
+	// clientOptions := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+
+	// * Code updated to setup client TLS
+	clientTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
+		CAFile: config.CAFile,
+	})
 	require.NoError(t, err)
-	client = api.NewLogClient(conn)
+
+	clientCreds := credentials.NewTLS(clientTLSConfig)
+	// cc, err := grpc.NewClient(l.Addr().String(), clientOptions...)
+
+	// * Code updated to setup client TLS
+	cc, err := grpc.NewClient(
+		l.Addr().String(),
+		grpc.WithTransportCredentials(clientCreds),
+	)
+	require.NoError(t, err)
+
+	client = api.NewLogClient(cc)
 
 	// Now we need to create a server and start serving our requests
 	// For that we need config
 	// For config, we need a commit log
 	// For a commit log, we need a directory
+	// * Code updated to setup server TLS
+	serverTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
+		CertFile:      config.ServerCertFile,
+		KeyFile:       config.ServerKeyFile,
+		CAFile:        config.CAFile,
+		ServerAddress: l.Addr().String(),
+	})
+	require.NoError(t, err)
+
+	serverCreds := credentials.NewTLS(serverTLSConfig)
+
 	dir, err := os.MkdirTemp("", "server_test")
 	require.NoError(t, err)
 
@@ -62,7 +89,7 @@ func setupTest(t *testing.T, fn func(*config)) (
 	require.NoError(t, err)
 
 	// named return
-	cfg = &config{
+	cfg = &Config{
 		commitlog: clog,
 	}
 
@@ -70,7 +97,9 @@ func setupTest(t *testing.T, fn func(*config)) (
 		fn(cfg)
 	}
 
-	server, err := NewGRPCServer(cfg)
+	// server, err := NewGRPCServer(cfg)
+	// * Code updated to setup TLS
+	server, err := NewGRPCServer(cfg, grpc.Creds(serverCreds))
 	require.NoError(t, err)
 
 	// blocking call, therefore goroutine
@@ -81,16 +110,16 @@ func setupTest(t *testing.T, fn func(*config)) (
 	return client, cfg, func() {
 		// teardown function
 		server.Stop()
-		conn.Close()
+		cc.Close()
 		l.Close()
-		clog.Remove()
+		clog.Remove() // TODO: re-check if needed
 	}
 }
 
 func testProduceConsume(
 	t *testing.T,
 	client api.LogClient,
-	config *config,
+	config *Config,
 ) {
 	ctx := context.Background()
 	want := &api.Record{
@@ -109,7 +138,7 @@ func testProduceConsume(
 func testProduceConsumeStream(
 	t *testing.T,
 	client api.LogClient,
-	config *config,
+	config *Config,
 ) {
 	ctx := context.Background()
 
@@ -165,7 +194,7 @@ func testProduceConsumeStream(
 func testConsumePastRange(
 	t *testing.T,
 	client api.LogClient,
-	config *config,
+	config *Config,
 ) {
 	ctx := context.Background()
 	record := &api.Record{Value: []byte("India's Got Latent")}

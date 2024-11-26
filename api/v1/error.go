@@ -18,7 +18,7 @@ func (e ErrOffsetOutOfRange) GRPCStatus() *status.Status {
 	)
 
 	msg := fmt.Sprintf(
-		"The requested offset is outside the log's range: %s",
+		"The requested offset is outside the log's range: %d",
 		e.Offset,
 	)
 

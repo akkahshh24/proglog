@@ -12,7 +12,7 @@ type commitLog interface {
 	Read(uint64) (*api.Record, error)
 }
 
-type config struct {
+type Config struct {
 	// we can pass a log implementation based on our needs (dev/prod)
 	// by having our service depend on a log interface rather than a concrete type
 	commitlog commitLog
@@ -20,20 +20,27 @@ type config struct {
 
 type grpcServer struct {
 	api.UnimplementedLogServer
-	*config
+	*Config
 }
 
-func newGrpcServer(config *config) (srv *grpcServer, err error) {
+func newGRPCServer(config *Config) (srv *grpcServer, err error) {
 	srv = &grpcServer{
-		config: config,
+		Config: config,
 	}
 
 	return srv, nil
 }
 
-func NewGRPCServer(config *config) (*grpc.Server, error) {
-	gsrv := grpc.NewServer()
-	srv, err := newGrpcServer(config)
+// func NewGRPCServer(config *Config) (*grpc.Server, error) {
+// * Code updated to setup TLS
+func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (
+	*grpc.Server,
+	error,
+) {
+	// gsrv := grpc.NewServer()
+	// * Code updated to setup TLS
+	gsrv := grpc.NewServer(opts...)
+	srv, err := newGRPCServer(config)
 	if err != nil {
 		return nil, err
 	}

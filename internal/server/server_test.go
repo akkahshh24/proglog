@@ -7,10 +7,12 @@ import (
 	"testing"
 
 	api "github.com/akkahshh24/proglog/api/v1"
+	"github.com/akkahshh24/proglog/internal/auth"
 	"github.com/akkahshh24/proglog/internal/config"
 	"github.com/akkahshh24/proglog/internal/log"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
@@ -18,24 +20,31 @@ import (
 func TestServer(t *testing.T) {
 	for scenario, fn := range map[string]func(
 		t *testing.T,
-		client api.LogClient,
+		// 2. client api.LogClient,
+		rootClient api.LogClient,
+		nobodyClient api.LogClient,
 		config *Config,
 	){
 		"produce/consume a msg to/from the log succeeds": testProduceConsume,
 		"produce/consume stream succeeds":                testProduceConsumeStream,
+		"unauthorized client fails":                      testUnauthorized,
 		"consume past offset range fails":                testConsumePastRange,
 	} {
 		t.Run(scenario, func(t *testing.T) {
-			client, config, teardown := setupTest(t, nil)
+			// 2. client, config, teardown := setupTest(t, nil)
+			rootClient, nobodyClient, config, teardown := setupTest(t, nil)
 			defer teardown()
-			fn(t, client, config)
+			// 2. fn(t, client, config)
+			fn(t, rootClient, nobodyClient, config) // ? why is config needed?
 		})
 	}
 }
 
 // TODO: what is the use of fn?
 func setupTest(t *testing.T, fn func(*Config)) (
-	client api.LogClient,
+	// 2. client api.LogClient,
+	rootClient api.LogClient,
+	nobodyClient api.LogClient,
 	cfg *Config,
 	teardown func(),
 ) {
@@ -46,28 +55,65 @@ func setupTest(t *testing.T, fn func(*Config)) (
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
-	// make an insecure connection to the listener
-	// clientOptions := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	// 1. make an insecure connection to the listener
+	// 1. clientOptions := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	// * Code updated to setup client TLS
-	clientTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
-		CertFile: config.ClientCertFile,
-		KeyFile:  config.ClientKeyFile,
-		CAFile:   config.CAFile,
-	})
-	require.NoError(t, err)
+	// * 2. Code updated to setup client TLS
+	// 2. clientTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
+	// 	CertFile: config.ClientCertFile,
+	// 	KeyFile:  config.ClientKeyFile,
+	// 	CAFile:   config.CAFile,
+	// })
+	// require.NoError(t, err)
 
-	clientCreds := credentials.NewTLS(clientTLSConfig)
-	// cc, err := grpc.NewClient(l.Addr().String(), clientOptions...)
+	// 1. cc, err := grpc.NewClient(l.Addr().String(), clientOptions...)
+	// 2. clientCreds := credentials.NewTLS(clientTLSConfig)
 
-	// * Code updated to setup client TLS
-	cc, err := grpc.NewClient(
-		l.Addr().String(),
-		grpc.WithTransportCredentials(clientCreds),
+	// * 2. Code updated to setup client TLS
+	// 2. cc, err := grpc.NewClient(
+	// 	l.Addr().String(),
+	// 	grpc.WithTransportCredentials(clientCreds),
+	// )
+	// require.NoError(t, err)
+
+	// 2. client = api.NewLogClient(cc)
+
+	// * 3. Build two clients for testing authorization
+	// 3. root client to produce and consume
+	// 3. nobody client with no permissions
+	newClient := func(certPath, keyPath string) (
+		*grpc.ClientConn,
+		api.LogClient,
+		[]grpc.DialOption,
+	) {
+		tlsConfig, err := config.SetupTLSConfig(config.TLSConfig{
+			CertFile: certPath,
+			KeyFile:  keyPath,
+			CAFile:   config.CAFile,
+			Server:   false,
+		})
+		require.NoError(t, err)
+
+		tlsCreds := credentials.NewTLS(tlsConfig)
+		opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
+		conn, err := grpc.NewClient(l.Addr().String(), opts...)
+		require.NoError(t, err)
+
+		client := api.NewLogClient(conn)
+		return conn, client, opts
+	}
+
+	var rootConn *grpc.ClientConn
+	rootConn, rootClient, _ = newClient(
+		config.RootClientCertFile,
+		config.RootClientKeyFile,
 	)
-	require.NoError(t, err)
 
-	client = api.NewLogClient(cc)
+	var nobodyConn *grpc.ClientConn
+	nobodyConn, nobodyClient, _ = newClient(
+		config.NobodyClientCertFile,
+		config.NobodyClientKeyFile,
+	)
 
 	// Now we need to create a server and start serving our requests
 	// For that we need config
@@ -91,9 +137,12 @@ func setupTest(t *testing.T, fn func(*Config)) (
 	clog, err := log.NewLog(dir, log.Config{})
 	require.NoError(t, err)
 
+	authorizer := auth.New(config.ACLModelFile, config.ACLPolicyFile)
+
 	// named return
 	cfg = &Config{
-		commitlog: clog,
+		commitlog:  clog,
+		authorizer: authorizer,
 	}
 
 	if fn != nil {
@@ -110,10 +159,13 @@ func setupTest(t *testing.T, fn func(*Config)) (
 		server.Serve(l)
 	}()
 
-	return client, cfg, func() {
+	// 2. return client, cfg, func() {
+	return rootClient, nobodyClient, cfg, func() {
 		// teardown function
 		server.Stop()
-		cc.Close()
+		// 2. cc.Close()
+		rootConn.Close()
+		nobodyConn.Close()
 		l.Close()
 		clog.Remove() // TODO: re-check if needed
 	}
@@ -121,7 +173,8 @@ func setupTest(t *testing.T, fn func(*Config)) (
 
 func testProduceConsume(
 	t *testing.T,
-	client api.LogClient,
+	client,
+	_ api.LogClient,
 	config *Config,
 ) {
 	ctx := context.Background()
@@ -140,7 +193,8 @@ func testProduceConsume(
 
 func testProduceConsumeStream(
 	t *testing.T,
-	client api.LogClient,
+	client,
+	_ api.LogClient,
 	config *Config,
 ) {
 	ctx := context.Background()
@@ -194,9 +248,51 @@ func testProduceConsumeStream(
 	}
 }
 
+func testUnauthorized(
+	t *testing.T,
+	_,
+	client api.LogClient, // use nobody client
+	config *Config,
+) {
+	ctx := context.Background()
+
+	// produce using unauthorized client and check response and error code
+	produce, err := client.Produce(ctx,
+		&api.ProduceRequest{
+			Record: &api.Record{
+				Value: []byte("scalability"),
+			},
+		},
+	)
+	if produce != nil {
+		t.Fatalf("produce response should be nil")
+	}
+
+	gotCode, wantCode := status.Code(err), codes.PermissionDenied
+	if gotCode != wantCode {
+		t.Fatalf("got code: %d, want: %d", gotCode, wantCode)
+	}
+
+	// consume using unauthorized client and check response and error code
+	consume, err := client.Consume(ctx,
+		&api.ConsumeRequest{
+			Offset: 0,
+		},
+	)
+	if consume != nil {
+		t.Fatalf("consume response should be nil")
+	}
+
+	gotCode = status.Code(err)
+	if gotCode != wantCode {
+		t.Fatalf("got code: %d, want: %d", gotCode, wantCode)
+	}
+}
+
 func testConsumePastRange(
 	t *testing.T,
-	client api.LogClient,
+	client,
+	_ api.LogClient,
 	config *Config,
 ) {
 	ctx := context.Background()

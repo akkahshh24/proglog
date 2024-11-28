@@ -11,11 +11,14 @@ require (
 )
 
 require (
+	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
+	github.com/casbin/casbin v1.9.1 // indirect
 	github.com/cloudflare/cfssl v1.6.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-sql-driver/mysql v1.7.1 // indirect
 	github.com/google/certificate-transparency-go v1.1.7 // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/jmhodges/clock v1.2.0 // indirect
 	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/kisielk/sqlstruct v0.0.0-20201105191214-5f3e10d3ab46 // indirect

@@ -137,10 +137,6 @@ func setupTest(t *testing.T, fn func(*Config)) (
 		config.NobodyClientKeyFile,
 	)
 
-	// Now we need to create a server and start serving our requests
-	// For that we need config
-	// For config, we need a commit log
-	// For a commit log, we need a directory
 	// * Code updated to setup server TLS
 	serverTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
 		CertFile:      config.ServerCertFile,
@@ -150,9 +146,13 @@ func setupTest(t *testing.T, fn func(*Config)) (
 		Server:        true, // for mutual TLS
 	})
 	require.NoError(t, err)
-
+	
 	serverCreds := credentials.NewTLS(serverTLSConfig)
-
+	
+	// Now we need to create a server and start serving our requests
+	// For that we need config
+	// For config, we need a commit log
+	// For a commit log, we need a directory
 	dir, err := os.MkdirTemp("", "server_test")
 	require.NoError(t, err)
 

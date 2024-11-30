@@ -2,11 +2,19 @@ package server
 
 import (
 	"context"
+	"time"
 
 	api "github.com/akkahshh24/proglog/api/v1"
+	"go.opencensus.io/plugin/ocgrpc"
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/trace"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
+	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
+	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -51,28 +59,63 @@ func newGRPCServer(config *Config) (srv *grpcServer, err error) {
 
 // func NewGRPCServer(config *Config) (*grpc.Server, error) {
 // * Code updated to setup TLS
-func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (
+func NewGRPCServer(config *Config, grpcOpts ...grpc.ServerOption) (
 	*grpc.Server,
 	error,
 ) {
-	opts = append(opts,
-		// set up authentication interceptor for gRPC streaming calls
+	// configure Zap logger
+	logger := zap.L().Named("server") // specify logger's name
+	zapOpts := []grpc_zap.Option{
+		grpc_zap.WithDurationField(
+			// log the duration of each request in nanoseconds
+			func(duration time.Duration) zapcore.Field {
+				return zap.Int64(
+					"grpc.time_ns",
+					duration.Nanoseconds(),
+				)
+			},
+		),
+	}
+
+	// configure OpenCensus to trace all the requests
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+	err := view.Register(ocgrpc.DefaultServerViews...)
+	if err != nil {
+		return nil, err
+	}
+
+	grpcOpts = append(grpcOpts,
 		grpc.StreamInterceptor(
+			// chain multiple interceptors in a sequence
 			grpc_middleware.ChainStreamServer(
+				// add request metadata to the context
+				// (eg. Client IP, method name, etc.)
+				grpc_ctxtags.StreamServerInterceptor(),
+				// log request metadata
+				grpc_zap.StreamServerInterceptor(logger, zapOpts...),
+				// set up authentication interceptor for gRPC streaming calls
 				grpc_auth.StreamServerInterceptor(authenticate),
 			),
 		),
-		// set up authentication interceptor for gRPC unary calls
 		grpc.UnaryInterceptor(
+			// chain multiple interceptors in a sequence
 			grpc_middleware.ChainUnaryServer(
+				// add request metadata to the context
+				// (eg. Client IP, method name, etc.)
+				grpc_ctxtags.UnaryServerInterceptor(),
+				// log request metadata
+				grpc_zap.UnaryServerInterceptor(logger, zapOpts...),
+				// set up authentication interceptor for gRPC unary calls
 				grpc_auth.UnaryServerInterceptor(authenticate),
 			),
 		),
+		// let OpenCensus capture server's stats
+		grpc.StatsHandler(&ocgrpc.ServerHandler{}),
 	)
 
 	// gsrv := grpc.NewServer()
 	// * Code updated to setup TLS
-	gsrv := grpc.NewServer(opts...)
+	gsrv := grpc.NewServer(grpcOpts...)
 	srv, err := newGRPCServer(config)
 	if err != nil {
 		return nil, err

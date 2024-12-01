@@ -37,11 +37,12 @@ type authorizer interface {
 	Authorize(subject, object, action string) error
 }
 
+// * Exported: used by agent
 type Config struct {
 	// we can pass a log implementation based on our needs (dev/prod)
 	// by having our service depend on a log interface rather than a concrete type
-	commitlog  commitLog
-	authorizer authorizer
+	Commitlog  commitLog
+	Authorizer authorizer
 }
 
 type grpcServer struct {
@@ -131,7 +132,7 @@ func (s *grpcServer) Produce(
 	req *api.ProduceRequest,
 ) (*api.ProduceResponse, error) {
 	// check if the client is authorized to produce
-	if err := s.authorizer.Authorize(
+	if err := s.Authorizer.Authorize(
 		subject(ctx),
 		objectWildcard,
 		produceAction,
@@ -139,7 +140,7 @@ func (s *grpcServer) Produce(
 		return nil, err
 	}
 
-	offset, err := s.commitlog.Append(req.Record)
+	offset, err := s.Commitlog.Append(req.Record)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,7 @@ func (s *grpcServer) Consume(
 	req *api.ConsumeRequest,
 ) (*api.ConsumeResponse, error) {
 	// check if the client is authorized to consume
-	if err := s.authorizer.Authorize(
+	if err := s.Authorizer.Authorize(
 		subject(ctx),
 		objectWildcard,
 		consumeAction,
@@ -161,7 +162,7 @@ func (s *grpcServer) Consume(
 		return nil, err
 	}
 
-	record, err := s.commitlog.Read(req.Offset)
+	record, err := s.Commitlog.Read(req.Offset)
 	if err != nil {
 		return nil, err
 	}

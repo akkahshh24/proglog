@@ -9,7 +9,7 @@ import (
 )
 
 func TestLog(t *testing.T) {
-	for scenario, fn := range map[string]func(t *testing.T, log *log){
+	for scenario, fn := range map[string]func(t *testing.T, log *Log){
 		"append and read a record successfully": testAppendRead,
 		"offset out of range error":             testOutOfRangeErr,
 		"initialize with existing segments":     testInitExisting,
@@ -30,7 +30,7 @@ func TestLog(t *testing.T) {
 	}
 }
 
-func testAppendRead(t *testing.T, log *log) {
+func testAppendRead(t *testing.T, log *Log) {
 	want := &api.Record{
 		Value: []byte("Muscleblaze"),
 	}
@@ -44,7 +44,7 @@ func testAppendRead(t *testing.T, log *log) {
 	require.Equal(t, want.Value, got.Value)
 }
 
-func testOutOfRangeErr(t *testing.T, log *log) {
+func testOutOfRangeErr(t *testing.T, log *Log) {
 	record, err := log.Read(1)
 	require.Nil(t, record)
 
@@ -55,7 +55,7 @@ func testOutOfRangeErr(t *testing.T, log *log) {
 }
 
 // Tests if new log sets itself up with the old data
-func testInitExisting(t *testing.T, log *log) {
+func testInitExisting(t *testing.T, log *Log) {
 	record := &api.Record{
 		Value: []byte("Optimum Nutrition"),
 	}

@@ -41,8 +41,8 @@ func TestMembership(t *testing.T) {
 }
 
 // Sets up a new member under a free port
-func setupMember(t *testing.T, members []*membership) (
-	[]*membership, *handler,
+func setupMember(t *testing.T, members []*Membership) (
+	[]*Membership, *handler,
 ) {
 	id := len(members)
 	// get a free port
@@ -52,10 +52,10 @@ func setupMember(t *testing.T, members []*membership) (
 		"rpc_addr": addr,
 	}
 
-	config := config{
-		nodeName: fmt.Sprintf("%d", id),
-		bindAddr: addr,
-		tags:     tags,
+	config := Config{
+		NodeName: fmt.Sprintf("%d", id),
+		BindAddr: addr,
+		Tags:     tags,
 	}
 
 	handler := &handler{}
@@ -65,8 +65,8 @@ func setupMember(t *testing.T, members []*membership) (
 		handler.joins = make(chan map[string]string, 3)
 		handler.leaves = make(chan string, 3)
 	} else {
-		config.startJoinAddrs = []string{
-			members[0].bindAddr,
+		config.StartJoinAddrs = []string{
+			members[0].BindAddr,
 		}
 	}
 
@@ -83,8 +83,8 @@ type handler struct {
 	leaves chan string
 }
 
-// Puts and new member's id and addr in the joins channel
-func (h *handler) join(id, addr string) error {
+// Puts the new member's id and addr in the joins channel
+func (h *handler) Join(id, addr string) error {
 	if h.joins != nil {
 		h.joins <- map[string]string{
 			"id":   id,
@@ -95,7 +95,7 @@ func (h *handler) join(id, addr string) error {
 }
 
 // Puts the member's id in the leaves channel
-func (h *handler) leave(id string) error {
+func (h *handler) Leave(id string) error {
 	if h.leaves != nil {
 		h.leaves <- id
 	}

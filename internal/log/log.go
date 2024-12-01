@@ -12,7 +12,8 @@ import (
 	api "github.com/akkahshh24/proglog/api/v1"
 )
 
-type log struct {
+// * Exported: used by agent
+type Log struct {
 	// RWMutex to grant access to multiple readers or a single writer
 	// concurrent read access and exclusive write access
 	// useful for frequent reads
@@ -23,7 +24,7 @@ type log struct {
 	segments      []*segment
 }
 
-func NewLog(dir string, c Config) (*log, error) {
+func NewLog(dir string, c Config) (*Log, error) {
 	// set defaults
 	if c.Segment.MaxStoreBytes == 0 {
 		c.Segment.MaxStoreBytes = 1024
@@ -33,7 +34,7 @@ func NewLog(dir string, c Config) (*log, error) {
 		c.Segment.MaxIndexBytes = 1024
 	}
 
-	l := &log{
+	l := &Log{
 		dir:    dir,
 		config: c,
 	}
@@ -42,7 +43,7 @@ func NewLog(dir string, c Config) (*log, error) {
 }
 
 // Setup with existing segments or bootstrap initial segment
-func (l *log) setup() error {
+func (l *Log) setup() error {
 	files, err := os.ReadDir(l.dir)
 	if err != nil {
 		return err
@@ -90,7 +91,7 @@ func (l *log) setup() error {
 
 // Creates a new segment, appends to the log's segment list
 // and makes that segment as active to write new records into
-func (l *log) newSegment(baseOffset uint64) error {
+func (l *Log) newSegment(baseOffset uint64) error {
 	s, err := newSegment(l.dir, baseOffset, l.config)
 	if err != nil {
 		return err
@@ -102,7 +103,7 @@ func (l *log) newSegment(baseOffset uint64) error {
 }
 
 // Appends a record to the log
-func (l *log) Append(record *api.Record) (uint64, error) {
+func (l *Log) Append(record *api.Record) (uint64, error) {
 	// * exclusive write lock
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -120,7 +121,7 @@ func (l *log) Append(record *api.Record) (uint64, error) {
 }
 
 // Reads the record at the given offset
-func (l *log) Read(off uint64) (*api.Record, error) {
+func (l *Log) Read(off uint64) (*api.Record, error) {
 	// * read lock
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -145,7 +146,7 @@ func (l *log) Read(off uint64) (*api.Record, error) {
 
 // To know the oldest offset stored on the node
 // useful in a replicated cluster env
-func (l *log) LowestOffset() (uint64, error) {
+func (l *Log) LowestOffset() (uint64, error) {
 	// * read lock
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -159,7 +160,7 @@ func (l *log) LowestOffset() (uint64, error) {
 
 // To know the latest offset stored on the node
 // useful in a replicated cluster env
-func (l *log) HighestOffset() (uint64, error) {
+func (l *Log) HighestOffset() (uint64, error) {
 	// * read lock
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -174,7 +175,7 @@ func (l *log) HighestOffset() (uint64, error) {
 }
 
 // Close iterates over the segments and closes them
-func (l *log) Close() error {
+func (l *Log) Close() error {
 	// * exclusive write lock
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -189,7 +190,7 @@ func (l *log) Close() error {
 }
 
 // Remove closes the log and removes its data
-func (l *log) Remove() error {
+func (l *Log) Remove() error {
 	if err := l.Close(); err != nil {
 		return err
 	}
@@ -198,7 +199,7 @@ func (l *log) Remove() error {
 }
 
 // Reset removes the log and then creates a new log
-func (l *log) Reset() error {
+func (l *Log) Reset() error {
 	if err := l.Remove(); err != nil {
 		return err
 	}

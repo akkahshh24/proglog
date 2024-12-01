@@ -7,18 +7,19 @@ import (
 	"go.uber.org/zap"
 )
 
+// * Exported: used by agent
 // It wraps Serf to provide discovery and cluster membership.
-type membership struct {
-	config
+type Membership struct {
+	Config
 	handler Handler
 	serf    *serf.Serf
 	events  chan serf.Event
 	logger  *zap.Logger
 }
 
-func New(handler Handler, config config) (*membership, error) {
-	m := &membership{
-		config:  config,
+func New(handler Handler, config Config) (*Membership, error) {
+	m := &Membership{
+		Config:  config,
 		handler: handler,
 		logger:  zap.L().Named("membership"),
 	}
@@ -29,17 +30,18 @@ func New(handler Handler, config config) (*membership, error) {
 	return m, nil
 }
 
-type config struct {
-	nodeName       string            // node's unique identifier across the cluster
-	bindAddr       string            // listens on this address
-	tags           map[string]string // ? purpose?
-	startJoinAddrs []string          // atleast 3 existing node addresses for new nodes to connect to and join the cluster
+// * Exported: used by agent
+type Config struct {
+	NodeName       string            // node's unique identifier across the cluster
+	BindAddr       string            // listens on this address
+	Tags           map[string]string // ? purpose?
+	StartJoinAddrs []string          // atleast 3 existing node addresses for new nodes to connect to and join the cluster
 }
 
 // Creates and configures a Serf instance and starts a goroutine
 // to handle Serf's events
-func (m *membership) setupSerf() error {
-	addr, err := net.ResolveTCPAddr("tcp", m.bindAddr)
+func (m *Membership) setupSerf() error {
+	addr, err := net.ResolveTCPAddr("tcp", m.BindAddr)
 	if err != nil {
 		return err
 	}
@@ -50,8 +52,8 @@ func (m *membership) setupSerf() error {
 	config.MemberlistConfig.BindPort = addr.Port
 	m.events = make(chan serf.Event)
 	config.EventCh = m.events // receive events when a member joins or leaves the cluster
-	config.Tags = m.tags
-	config.NodeName = m.nodeName
+	config.Tags = m.Tags
+	config.NodeName = m.NodeName
 
 	m.serf, err = serf.Create(config)
 	if err != nil {
@@ -59,8 +61,8 @@ func (m *membership) setupSerf() error {
 	}
 
 	go m.eventHandler()
-	if m.startJoinAddrs != nil {
-		_, err = m.serf.Join(m.startJoinAddrs, true)
+	if m.StartJoinAddrs != nil {
+		_, err = m.serf.Join(m.StartJoinAddrs, true)
 		if err != nil {
 			return err
 		}
@@ -70,12 +72,12 @@ func (m *membership) setupSerf() error {
 }
 
 type Handler interface {
-	join(name, addr string) error
-	leave(name string) error
+	Join(name, addr string) error
+	Leave(name string) error
 }
 
 // It handles each incoming event according to their type.
-func (m *membership) eventHandler() {
+func (m *Membership) eventHandler() {
 	for e := range m.events {
 		switch e.EventType() {
 		case serf.EventMemberJoin:
@@ -99,8 +101,8 @@ func (m *membership) eventHandler() {
 	}
 }
 
-func (m *membership) handleJoin(member serf.Member) {
-	if err := m.handler.join(
+func (m *Membership) handleJoin(member serf.Member) {
+	if err := m.handler.Join(
 		member.Name,
 		member.Tags["rpc_addr"],
 	); err != nil {
@@ -108,8 +110,8 @@ func (m *membership) handleJoin(member serf.Member) {
 	}
 }
 
-func (m *membership) handleLeave(member serf.Member) {
-	if err := m.handler.leave(
+func (m *Membership) handleLeave(member serf.Member) {
+	if err := m.handler.Leave(
 		member.Name,
 	); err != nil {
 		m.logError(err, "failed to leave", member)
@@ -117,22 +119,22 @@ func (m *membership) handleLeave(member serf.Member) {
 }
 
 // Returns whether the given Serf member is the local member.
-func (m *membership) isLocal(member serf.Member) bool {
+func (m *Membership) isLocal(member serf.Member) bool {
 	return m.serf.LocalMember().Name == member.Name
 }
 
 // Returns the cluster's current members.
-func (m *membership) Members() []serf.Member {
+func (m *Membership) Members() []serf.Member {
 	return m.serf.Members()
 }
 
 // The specified member leaves the Serf cluster.
-func (m *membership) Leave() error {
+func (m *Membership) Leave() error {
 	return m.serf.Leave()
 }
 
 // Logs the given error and message.
-func (m *membership) logError(err error, msg string, member serf.Member) {
+func (m *Membership) logError(err error, msg string, member serf.Member) {
 	m.logger.Error(
 		msg,
 		zap.Error(err),

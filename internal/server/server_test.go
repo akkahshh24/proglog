@@ -146,9 +146,9 @@ func setupTest(t *testing.T, fn func(*Config)) (
 		Server:        true, // for mutual TLS
 	})
 	require.NoError(t, err)
-	
+
 	serverCreds := credentials.NewTLS(serverTLSConfig)
-	
+
 	// Now we need to create a server and start serving our requests
 	// For that we need config
 	// For config, we need a commit log
@@ -188,8 +188,8 @@ func setupTest(t *testing.T, fn func(*Config)) (
 
 	// named return
 	cfg = &Config{
-		commitlog:  clog,
-		authorizer: authorizer,
+		Commitlog:  clog,
+		Authorizer: authorizer,
 	}
 
 	if fn != nil {

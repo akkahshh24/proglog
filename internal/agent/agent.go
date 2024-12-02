@@ -20,7 +20,7 @@ import (
 // It references each component it manages.
 // (Log, server, membership, replicator).
 type agent struct {
-	config config
+	config Config
 
 	log        *log.Log
 	server     *grpc.Server
@@ -34,19 +34,19 @@ type agent struct {
 
 // Comprises of the components' parameters it manages
 // to pass them through.
-type config struct {
+type Config struct {
 	dataDir         string // used to store log (store and index) files
 	serverTLSConfig *tls.Config
 	peerTLSConfig   *tls.Config
 	bindAddr        string // the address and port the server will listen on
 	rpcPort         int    // ? why is this needed?
-	nodename        string
+	nodeName        string
 	startJoinAddrs  []string
 	aclModelFile    string // used to configure authorizer
 	aclPolicyFile   string // used to configure authorizer
 }
 
-func (c config) RPCAddr() (string, error) {
+func (c Config) RPCAddr() (string, error) {
 	host, _, err := net.SplitHostPort(c.bindAddr)
 	if err != nil {
 		return "", err
@@ -57,7 +57,7 @@ func (c config) RPCAddr() (string, error) {
 
 // Creates an agent and runs a set of methods to set up
 // and run the agent's components.
-func New(config config) (*agent, error) {
+func New(config Config) (*agent, error) {
 	a := &agent{
 		config:    config,
 		shutdowns: make(chan struct{}),
@@ -175,7 +175,7 @@ func (a *agent) setupMembership() error {
 	a.membership, err = discovery.New(
 		a.replicator,
 		discovery.Config{
-			NodeName: a.config.nodename,
+			NodeName: a.config.nodeName,
 			BindAddr: a.config.bindAddr,
 			Tags: map[string]string{
 				"rpc_addr": rpcAddr,
